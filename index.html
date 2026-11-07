@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Software Architecture Meetup — Standby</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&family=Victor+Mono:ital,wght@0,100..700;1,100..700&display=swap" rel="stylesheet">
+<style>
+  @property --m { syntax: '<percentage>'; inherits: true; initial-value: 0%; }  /* tagline focus breathing */
+
+  :root {
+    --beat: .6s;               /* overwritten from BPM in the script */
+    --ink: #0b0e14;
+    --title: #fff;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #8fb4dc;
+    overflow: hidden;
+    display: grid;
+    place-items: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* --- sky: fills the whole viewport, independent of the 16:9 stage ---- */
+  .sky, .clouds { position: fixed; pointer-events: none; }
+  .sky, .clouds { inset: -4%; background: url(assets/bg.png) center / cover no-repeat; }
+  .sky { animation: kenburns calc(var(--beat) * 64) ease-in-out infinite alternate; }
+  /* second copy of the cloud deck, drifting = parallax */
+  .clouds {
+    inset: -6% -12%;
+    background-position: center 62%;
+    opacity: .55;
+    mix-blend-mode: screen;
+    -webkit-mask-image: linear-gradient(to bottom, transparent 48%, #000 70%);
+            mask-image: linear-gradient(to bottom, transparent 48%, #000 70%);
+    animation: drift calc(var(--beat) * 48) ease-in-out infinite alternate;
+  }
+  @keyframes kenburns { from { transform: scale(1) translate(0,0); } to { transform: scale(1.06) translate(-1%, .6%); } }
+  @keyframes drift    { from { transform: translateX(-4%) scale(1.15); } to { transform: translateX(4%) scale(1.18); } }
+
+  /* 16:9 stage, letterboxed; every size below is in cqw so it scales to any screen */
+  .stage {
+    position: relative;
+    width: min(100vw, 177.78vh);
+    aspect-ratio: 16 / 9;
+    container-type: inline-size;
+  }
+
+  /* --- logos ---------------------------------------------------------- */
+  .logos {
+    position: absolute; top: 2.6cqw; right: 2.5cqw;
+    display: flex; align-items: center; gap: 2.5cqw;
+  }
+  .logos img { display: block; width: auto; opacity: 0; animation: rise .9s cubic-bezier(.2,.7,.2,1) forwards; }
+  .logos img:nth-child(1) { height: 1.95cqw; animation-delay: .9s; }
+  .logos img:nth-child(2) { height: 2.05cqw; animation-delay: 1.05s; }
+  .logos img:nth-child(3) { height: 2.25cqw; animation-delay: 1.2s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(-.6cqw); filter: blur(4px); } to { opacity: 1; transform: none; filter: none; } }
+
+  /* --- title (typing) ------------------------------------------------- */
+  .title {
+    position: absolute; left: 4.4cqw; top: 4.6cqw;
+    font: 300 7cqw/0.91 'Victor Mono', ui-monospace, monospace;
+    letter-spacing: -0.01em;
+    color: var(--title);
+    white-space: pre;
+    text-shadow: 0 .1cqw 1.2cqw rgba(20,60,120,.18);
+  }
+  .title .rest { visibility: hidden; }   /* reserves the full block so nothing jumps */
+  .cursor { animation: blink var(--beat) steps(1) infinite; }   /* on for the beat, off for the "and" */
+  .title.typing .cursor { opacity: 1 !important; }   /* solid while typing; blink keeps running so it stays on the beat */
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* --- computer ------------------------------------------------------- */
+  .float {
+    position: absolute; left: 37.4cqw; top: 19.2cqw; width: 22.8cqw;
+    aspect-ratio: 1748 / 1552;
+  }
+  .tilt { width: 100%; height: 100%; }
+  .tilt canvas, .tilt img { display: block; width: 100%; height: 100%; }
+  .tilt img { filter: sepia(.3) saturate(1.3); }
+  /* soft shadow cast on the clouds */
+  .shadow {
+    position: absolute; left: 39.5cqw; top: 44.5cqw; width: 19cqw; height: 2cqw;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(40,70,120,.28), transparent);
+    filter: blur(.6cqw);
+  }
+
+  /* --- tagline (gradient fade + continuous blur) -----------------------
+     The text is stacked 5 times, each copy blurrier than the last. Soft
+     horizontal masks crossfade the copies, so blur grows smoothly left→right
+     while the colour gradient fades the letters out to transparent.      */
+  .tagline {
+    position: absolute; left: 0; right: 0; top: 41.9cqw;
+    font: italic 500 2.8cqw/1 'Instrument Sans', system-ui, sans-serif;
+    font-stretch: 96%;
+    letter-spacing: -0.035em;
+    word-spacing: .14em;
+    text-transform: uppercase;
+    animation: focus calc(var(--beat) * 4) ease-in-out infinite alternate;
+  }
+  /* two copies for the 56k load: the current pass above the scan line,
+     the previous (blockier) pass below it. The second stays hidden otherwise. */
+  .tagline .pass { display: block; position: relative; }
+  .tagline .pass + .pass { position: absolute; inset: 0; visibility: hidden; }
+  .tagline .layer + .layer { position: absolute; inset: 0; }
+  .tagline .line {
+    display: block; width: fit-content; margin: 0 auto;
+    padding: .15cqw .35em;                     /* room for italic overhang + blur halo */
+    color: transparent;
+    /* ink → mist fade */
+    background:
+      linear-gradient(90deg, rgba(30,34,42,1) 0%, rgba(44,49,60,.97) 30%, rgba(78,88,104,.9) 52%, rgba(126,137,155,.8) 76%, rgba(170,181,199,.62) 100%);
+    -webkit-background-clip: text; background-clip: text;
+    filter: blur(var(--blur));
+    -webkit-mask-image: var(--band);
+            mask-image: var(--band);
+  }
+  .tagline .line + .line { margin-top: -.3cqw; transform: translateX(.2cqw); }
+  /* --m nudges every crossfade point, so the in-focus zone breathes with the music */
+  .layer:nth-child(1) { --blur: 0px;     --band: linear-gradient(90deg, #000 calc(46% + var(--m)), transparent calc(62% + var(--m))); }
+  .layer:nth-child(2) { --blur: .035cqw; --band: linear-gradient(90deg, transparent calc(46% + var(--m)), #000 calc(62% + var(--m)), transparent calc(75% + var(--m))); }
+  .layer:nth-child(3) { --blur: .09cqw;  --band: linear-gradient(90deg, transparent calc(62% + var(--m)), #000 calc(75% + var(--m)), transparent calc(85% + var(--m))); }
+  .layer:nth-child(4) { --blur: .17cqw;  --band: linear-gradient(90deg, transparent calc(75% + var(--m)), #000 calc(85% + var(--m)), transparent calc(94% + var(--m))); }
+  .layer:nth-child(5) { --blur: .28cqw;  --band: linear-gradient(90deg, transparent calc(85% + var(--m)), #000 calc(94% + var(--m))); }
+  @keyframes focus  { from { --m: -4%; } to { --m: 5%; } }
+  @keyframes blur-in { from { opacity: 0; filter: blur(12px); transform: translateY(.6cqw); } to { opacity: 1; filter: none; transform: none; } }
+
+  /* --- subtitle ------------------------------------------------------- */
+  .subtitle {
+    position: absolute; left: 0; right: 0; top: 50cqw;
+    text-align: center;
+    font: italic 500 2.8cqw/1 'Instrument Sans', system-ui, sans-serif;
+    font-stretch: 92%;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    outline: none;
+    opacity: 0;
+    animation: blur-in 1.2s cubic-bezier(.2,.7,.2,1) 1.6s forwards;
+  }
+  .subtitle .countdown { font-variant-numeric: tabular-nums; }      /* digits don't jitter as they tick */
+  .subtitle .countdown.done { animation: blink 1s steps(1) infinite; }   /* .5s on, .5s off */
+
+  /* tap-tempo readout, only shown briefly after tapping T */
+  .bpm {
+    position: fixed; left: 16px; bottom: 16px;
+    font: 500 14px/1 'Victor Mono', monospace; color: #fff;
+    background: rgba(10,20,40,.45); padding: 8px 10px; border-radius: 6px;
+    opacity: 0; transition: opacity .4s;
+  }
+  .bpm.show { opacity: 1; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; }
+  }
+</style>
+</head>
+<body>
+<div class="sky"></div>
+<div class="clouds"></div>
+
+<main class="stage">
+  <div class="logos">
+    <img src="assets/softnetics.svg" alt="Softnetics">
+    <img src="assets/cleverse.svg" alt="Cleverse">
+    <img src="assets/creatorsgarten.svg" alt="Creatorsgarten">
+  </div>
+
+  <h1 class="title" aria-label="Software Architecture Meetup"><span class="typed" aria-hidden="true"></span><span class="cursor" aria-hidden="true">_</span><span class="rest" aria-hidden="true"></span></h1>
+
+  <div class="shadow"></div>
+  <div class="float"><div class="tilt" id="computer"></div></div>
+
+  <p class="tagline">
+    <span class="pass"><span class="layer"><span class="line">Complexity is inevitable.</span><span class="line">Chaos is optional.</span></span></span>
+  </p>
+
+  <p class="subtitle" contenteditable="plaintext-only" spellcheck="false"></p>
+</main>
+<div class="bpm" aria-live="polite"></div>
+
+<script src="assets/computer-data.js"></script>
+<script>
+/* ===== Settings ============================================================
+   URL params:  ?subtitle=13%20.%2011%20.%202026   ?bpm=105
+                ?countdown=19:00:00  counts down to that local time today in
+                place of the subtitle; blinks 00:00:00 once reached/passed
+   Live sync:   tap the T key on the beat (4+ taps) to match the music's
+                tempo; the last tap becomes the downbeat.
+   Fullscreen:  press F (or double-click) to toggle.                       */
+const params = new URLSearchParams(location.search);
+const SYNC = {
+  bpm: Number(params.get('bpm')) || 100,   // typical synthwave is 85–118
+  beatsPerBar: 4,
+};
+const REFRACTION = {                       // mirrors the Figma "Pattern refraction" panel
+  strength: 32,     // %
+  dispersion: 3,    // %
+  size: 6.18,       // strip width, % of image ("R")
+  angle: 45,        // degrees ("A")
+  offset: 0.15,     // strip phase; 0.15 lines the slices up like example.png
+  curve: 0.6,       // cylinder profile: 0 = flat prism, higher = curlier strip edges
+  warmth: 0.25,     // 0 = original beige, 1 = full gold grade
+  playMs: 7000,     // "56k modem" load: blocky interlaced passes crawl in top→bottom, then...
+  taglineMs: 5000,  // the tagline downloads the same way, starting together with the computer
+  holdMs: 30000,    // ...both rest for this long, then reload together
+};
+const TITLE = 'Software\nArchitecture\nMeetup';
+const LOOP_MS = 30000;                     // typing loop, snapped to whole bars
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ===== Beat clock ========================================================
+   Every looping CSS animation is a whole number of beats long (see the
+   calc(var(--beat) * n) durations) and gets re-anchored to the downbeat. */
+const clock = {
+  anchor: performance.now(),
+  get beatMs() { return 60000 / SYNC.bpm; },
+  get barMs() { return this.beatMs * SYNC.beatsPerBar; },
+  beats(t = performance.now()) { return (t - this.anchor) / this.beatMs; },
+  nextBar(t = performance.now()) { return this.anchor + Math.ceil((t - this.anchor) / this.barMs) * this.barMs; },
+};
+function alignLoops() {
+  document.documentElement.style.setProperty('--beat', `${clock.beatMs / 1000}s`);
+  for (const a of document.getAnimations()) {
+    if (a.effect?.getTiming().iterations === Infinity) a.startTime = clock.anchor;
+  }
+}
+alignLoops();
+
+/* ===== 56k modem load timeline (shared by computer + tagline) ============
+   Interlaced passes, each crawling down in uneven bursts with the odd stall.
+   Returns events {t ms, k pass index, y 0..1 scan line}.                  */
+const modemEvents = (passes, ms) => {
+  const events = [];
+  let t = 0;
+  for (let k = 0; k < passes; k++) {
+    const steps = 7 + Math.floor(Math.random() * 6);
+    let y = 0;
+    for (let i = 1; i <= steps; i++) {
+      t += Math.random() < .15 ? 3 : .4 + Math.random();          // mostly bursts, sometimes a stall
+      y = i === steps ? 1 : Math.min(1, y + (.4 + Math.random() * 1.2) / steps);
+      events.push({ t, k, y });
+    }
+  }
+  events.forEach(e => e.t *= ms / t);
+  return events;
+};
+// Calls apply(k, y) as the scan advances; resolves when the last pass lands.
+const playEvents = (events, apply) => new Promise(done => {
+  const start = performance.now();
+  let i = 0;
+  apply(0, 0);
+  const tick = now => {
+    while (i < events.length && events[i].t <= now - start) { const e = events[i++]; apply(e.k, e.y); }
+    i < events.length ? requestAnimationFrame(tick) : done();
+  };
+  requestAnimationFrame(tick);
+});
+
+// tap tempo
+(() => {
+  const taps = [], hud = document.querySelector('.bpm');
+  let hideTimer;
+  addEventListener('keydown', e => {
+    if (e.code !== 'KeyT' || e.target.isContentEditable) return;
+    const now = performance.now();
+    if (taps.length && now - taps.at(-1) > 2000) taps.length = 0;
+    taps.push(now); if (taps.length > 8) taps.shift();
+    if (taps.length >= 4) {
+      const avg = (taps.at(-1) - taps[0]) / (taps.length - 1);
+      SYNC.bpm = Math.round(60000 / avg * 10) / 10;
+      clock.anchor = now;
+      alignLoops();
+    }
+    hud.textContent = taps.length >= 4 ? `${SYNC.bpm} BPM` : `tap ${taps.length}/4`;
+    hud.classList.add('show');
+    clearTimeout(hideTimer); hideTimer = setTimeout(() => hud.classList.remove('show'), 1500);
+  });
+})();
+
+// F = toggle fullscreen (also double-click anywhere)
+const toggleFullscreen = () => document.fullscreenElement
+  ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
+addEventListener('keydown', e => {
+  if (e.code === 'KeyF' && !e.target.isContentEditable && !e.metaKey && !e.ctrlKey) toggleFullscreen();
+});
+addEventListener('dblclick', e => { if (!e.target.isContentEditable) toggleFullscreen(); });
+
+/* ===== Subtitle / countdown ============================================== */
+(() => {
+  const sub = document.querySelector('.subtitle');
+  const m = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(params.get('countdown') ?? '');
+  if (!m || m[1] > 23 || m[2] > 59 || (m[3] ?? 0) > 59) return void (sub.textContent = params.get('subtitle') ?? "");
+
+  const target = new Date();                                   // local time of the viewer's machine
+  target.setHours(m[1], m[2], m[3] ?? 0, 0);
+  const el = document.createElement('span');
+  el.className = 'countdown';
+  sub.removeAttribute('contenteditable');
+  sub.replaceChildren(el);
+  const pad = n => String(n).padStart(2, '0');
+  const tick = () => {
+    const left = Math.max(0, Math.ceil((target - Date.now()) / 1000));   // 00:00:00 lands exactly on the target
+    el.textContent = `${pad(Math.floor(left / 3600))}:${pad(Math.floor(left / 60) % 60)}:${pad(left % 60)}`;
+    if (left) return setTimeout(tick, 1000 - Date.now() % 1000 + 5);    // re-read the clock each second, so no drift
+    el.classList.add('done');
+  };
+  tick();
+})();
+
+/* ===== Typing title: keystrokes on 16th notes, loop ≈30s in whole bars === */
+(() => {
+  const el = document.querySelector('.title');
+  const typed = el.querySelector('.typed'), rest = el.querySelector('.rest');
+  const show = n => { typed.textContent = TITLE.slice(0, n); rest.textContent = TITLE.slice(n); };
+  if (reduceMotion) return show(TITLE.length);
+
+  const until = t => new Promise(r => setTimeout(r, Math.max(0, t - performance.now())));
+  async function cycle() {
+    let t = clock.nextBar();                         // start typing on a downbeat
+    const end = t + Math.max(1, Math.round(LOOP_MS / clock.barMs)) * clock.barMs;
+    await until(t);
+    el.classList.add('typing');
+    const step = clock.beatMs / 4;
+    for (let i = 1; i <= TITLE.length; i++) {
+      // newline = an 8th-note pause; the odd skipped 16th keeps it human
+      t += step * (TITLE[i - 1] === '\n' ? 2 : Math.random() < .15 ? 2 : 1);
+      await until(t); show(i);
+    }
+    el.classList.remove('typing');
+    // erase on 32nd notes so it finishes exactly on the next loop's downbeat
+    const eraseStart = end - TITLE.length * step / 2 - clock.barMs;
+    await until(eraseStart);
+    el.classList.add('typing');
+    for (let i = TITLE.length - 1; i >= 0; i--) { await until(eraseStart + (TITLE.length - i) * step / 2); show(i); }
+    el.classList.remove('typing');
+    cycle();
+  }
+  show(0);
+  cycle();
+})();
+
+/* ===== Tagline: four blurrier copies stacked on the sharp one ============ */
+const tagline = (() => {
+  const tag = document.querySelector('.tagline'), cur = tag.querySelector('.pass'), base = cur.querySelector('.layer');
+  for (let i = 0; i < 4; i++) {
+    const copy = base.cloneNode(true);
+    copy.setAttribute('aria-hidden', 'true');
+    cur.append(copy);
+  }
+  const prev = cur.cloneNode(true);
+  prev.setAttribute('aria-hidden', 'true');
+  tag.append(prev);
+
+  // 56k passes: [block size in CSS px, colour levels (0 = full colour)]; 1 = sharp.
+  // SVG pixelate: keep one pixel per block (flood dot tiled, masked by the text), dilate it to fill the block.
+  const PASSES = [[16, 4], [8, 6], [4, 12], [1, 0]];
+  const levels = n => Array.from({ length: n }, (_, i) => i / (n - 1)).join(' ');
+  document.body.insertAdjacentHTML('beforeend', `<svg width="0" height="0" style="position:absolute" aria-hidden="true">${
+    PASSES.filter(([b]) => b > 1).map(([b, post]) => `
+    <filter id="px${b}" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feFlood x="${b / 2}" y="${b / 2}" width="1" height="1" result="dot"/>
+      <feComposite in="dot" in2="dot" x="0" y="0" width="${b}" height="${b}" result="cell"/>
+      <feTile in="cell" result="grid"/>
+      <feComposite in="SourceGraphic" in2="grid" operator="in"/>
+      <feMorphology operator="dilate" radius="${b / 2}"/>
+      ${post ? `<feComponentTransfer>
+        <feFuncR type="discrete" tableValues="${levels(post)}"/><feFuncG type="discrete" tableValues="${levels(post)}"/>
+        <feFuncB type="discrete" tableValues="${levels(post)}"/><feFuncA type="discrete" tableValues="0 1"/>
+      </feComponentTransfer>` : ''}
+    </filter>`).join('')}</svg>`);
+
+  const set = (el, pass, clip = '') => {
+    el.style.visibility = pass ? 'visible' : 'hidden';
+    el.style.filter = pass && pass[0] > 1 ? `url(#px${pass[0]})` : '';
+    el.style.clipPath = clip;
+  };
+  const apply = (k, y) => {
+    const b = PASSES[k][0], h = cur.offsetHeight;
+    const Y = Math.min(100, Math.ceil(y * h / b) * b / h * 100);              // snap scan line to block rows
+    set(cur, PASSES[k], `inset(0 0 ${100 - Y}% 0)`);
+    set(prev, PASSES[k - 1], `inset(${Y}% 0 0 0)`);
+  };
+  return {
+    load: () => playEvents(modemEvents(PASSES.length, REFRACTION.taglineMs), apply)
+      .then(() => { set(cur, PASSES.at(-1), ''); set(prev); }),
+  };
+})();
+
+/* ===== Computer with pattern (lenticular) refraction ===================== */
+(() => {
+  const host = document.getElementById('computer');
+  const img = new Image();
+  img.src = window.COMPUTER_SRC || 'assets/computer.png';   // data URI so WebGL works from file://
+  img.alt = 'Retro computer terminal';
+
+  const fallback = () => { host.replaceChildren(img); };
+  const canvas = document.createElement('canvas');
+  const gl = canvas.getContext('webgl', { premultipliedAlpha: true, alpha: true, antialias: false });
+  if (!gl) return fallback();
+
+  const vs = `attribute vec2 p; varying vec2 uv;
+    void main(){ uv = p*.5+.5; uv.y = 1.-uv.y; gl_Position = vec4(p,0,1); }`;
+  const fs = `precision highp float;
+    varying vec2 uv;
+    uniform sampler2D tex;
+    uniform float aspect, period, strength, disp, angle, phase, warmth, curve;
+    uniform vec2 res;                                    // canvas size in device px
+    // progressive "dial-up" load: rows above scanY show pass A, rows below show pass B
+    uniform float scanY, blockA, blockB, postA, postB;   // block size in px (0 = not loaded yet), colour levels (0 = full)
+    vec4 tap(vec2 q){                                    // edge wrap: Zero
+      if (q.x < 0. || q.y < 0. || q.x > 1. || q.y > 1.) return vec4(0.);
+      return texture2D(tex, q);
+    }
+    void main(){
+      bool loaded = uv.y < scanY;
+      float blk = loaded ? blockA : blockB;
+      float post = loaded ? postA : postB;
+      if (blk <= 0.) { gl_FragColor = vec4(0.); return; }
+      vec2 q = uv;
+      if (blk > 1.) { vec2 cells = res / blk; q = (floor(uv * cells) + .5) / cells; }   // chunky pixels
+
+      vec2 n = vec2(cos(angle), sin(angle));
+      vec2 p = (q - .5) * vec2(aspect, 1.);              // square space, height = 1
+      float s = dot(p, n) / period + phase;
+      float f = fract(s) - .5;                           // -0.5..0.5 inside each strip
+      // each strip is a minifying cylinder lens: it squeezes a wide band of the image
+      // (≈ 1 + strength strip widths) into itself, so every strip shows a squashed,
+      // diagonal-leaning copy of the whole computer, like the Figma lenticular pattern.
+      // Convex profile: shift grows faster toward the strip edges (curled "lip" look)
+      float lens = f * (1. + curve * f * f * 4.);
+      vec2 off = n * lens * period * strength / vec2(aspect, 1.);
+      vec4 g = tap(q + off);
+      float r = tap(q + off * (1. - disp)).r;
+      float b = tap(q + off * (1. + disp)).b;
+      vec4 c = vec4(r, g.g, b, g.a);
+      vec3 gold = c.rgb * vec3(1.06, .94, .66) + vec3(.03, .015, 0.) * c.a;
+      c.rgb = mix(c.rgb, gold, warmth);
+      c.rgb += c.a * smoothstep(.44, .5, abs(f)) * .08;     // faint glass rim on each strip edge
+      if (post > 0.) {                                   // early passes: cheap-GIF colour banding
+        c.a = step(.5, c.a);
+        c.rgb = floor(c.rgb * post + .5) / post * c.a;
+      }
+      gl_FragColor = c;
+    }`;
+  const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw gl.getShaderInfoLog(s); return s; };
+
+  img.onload = () => {
+    try {
+      const prog = gl.createProgram();
+      gl.attachShader(prog, sh(gl.VERTEX_SHADER, vs));
+      gl.attachShader(prog, sh(gl.FRAGMENT_SHADER, fs));
+      gl.linkProgram(prog); gl.useProgram(prog);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(prog, 'p');
+      gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+
+      gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);   // throws if image is cross-origin
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+      const U = Object.fromEntries(['aspect','period','strength','disp','angle','phase','warmth','curve',
+        'res','scanY','blockA','blockB','postA','postB'].map(k => [k, gl.getUniformLocation(prog, k)]));
+      const aspect = img.width / img.height;
+      const DONE = { scanY: 1, blockA: 1, blockB: 1, postA: 0, postB: 0 };
+      let state = DONE, dpr = 1;
+      // Hand-tuned against example.png: "R" → strip width (×4), strength 44 → lens power (×3)
+      const draw = () => {
+        gl.uniform1f(U.aspect, aspect);
+        gl.uniform1f(U.disp, REFRACTION.dispersion / 100);
+        gl.uniform1f(U.angle, REFRACTION.angle * Math.PI / 180);
+        gl.uniform1f(U.warmth, REFRACTION.warmth);
+        gl.uniform1f(U.period, REFRACTION.size / 100 * aspect * 4);
+        gl.uniform1f(U.strength, REFRACTION.strength / 100 * 3);
+        gl.uniform1f(U.phase, REFRACTION.offset);
+        gl.uniform1f(U.curve, REFRACTION.curve);
+        gl.uniform2f(U.res, canvas.width, canvas.height);
+        gl.uniform1f(U.scanY, state.scanY);
+        gl.uniform1f(U.blockA, state.blockA * dpr);
+        gl.uniform1f(U.blockB, state.blockB * dpr);
+        gl.uniform1f(U.postA, state.postA);
+        gl.uniform1f(U.postB, state.postB);
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      };
+
+      host.replaceChildren(canvas);
+      const resize = () => {
+        dpr = Math.min(devicePixelRatio || 1, 2);
+        canvas.width = Math.round(host.clientWidth * dpr);
+        canvas.height = Math.round(host.clientHeight * dpr);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+        draw();                                            // resizing clears the canvas
+      };
+      resize(); addEventListener('resize', resize);
+
+      // 56k load passes: [block size in CSS px, colour levels per channel (0 = full colour)]
+      const PASSES = [[24, 6], [12, 10], [6, 16], [3, 0], [1, 0]];
+      const stateFor = (k, y) => {
+        const [blockA, postA] = PASSES[k], [blockB, postB] = k ? PASSES[k - 1] : [0, 0];
+        const rowsPx = canvas.height / dpr;
+        return { scanY: Math.ceil(y * rowsPx / blockA) * blockA / rowsPx, blockA, blockB, postA, postB };  // snap to block rows
+      };
+
+      // computer + tagline load side by side → hold → both reload. Idle during the hold.
+      const play = async () => {
+        await Promise.all([
+          playEvents(modemEvents(PASSES.length, REFRACTION.playMs), (k, y) => { state = stateFor(k, y); draw(); })
+            .then(() => { state = DONE; draw(); }),
+          tagline.load(),
+        ]);
+        setTimeout(play, REFRACTION.holdMs);
+      };
+      if (!reduceMotion) play();
+    } catch (e) {
+      console.warn('Refraction disabled:', e);
+      fallback();
+    }
+  };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "instrument sans",
+        "reason": "User confirmed instrument sans is intentional",
+        "createdAt": "2026-11-07T04:18:05.353Z"
+      }
+    ]
+  }
+}
