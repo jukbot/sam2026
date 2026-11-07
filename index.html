@@ -74,8 +74,8 @@
     text-shadow: 0 .1cqw 1.2cqw rgba(20,60,120,.18);
   }
   .title .rest { visibility: hidden; }   /* reserves the full block so nothing jumps */
-  .cursor { animation: blink var(--beat) steps(1) infinite; }   /* on for the beat, off for the "and" */
-  .title.typing .cursor { opacity: 1 !important; }   /* solid while typing; blink keeps running so it stays on the beat */
+  .cursor { animation: blink calc(16s / 70) steps(1) infinite; }   /* IBM VGA text-mode cursor: toggles every 8 frames at 70 Hz (~4.4 Hz) */
+  .title.typing .cursor { opacity: 1 !important; }   /* solid while typing */
   @keyframes blink { 50% { opacity: 0; } }
 
   /* --- computer ------------------------------------------------------- */
@@ -209,7 +209,7 @@ const REFRACTION = {                       // mirrors the Figma "Pattern refract
   offset: 0.15,     // strip phase; 0.15 lines the slices up like example.png
   curve: 0.6,       // cylinder profile: 0 = flat prism, higher = curlier strip edges
   warmth: 0.25,     // 0 = original beige, 1 = full gold grade
-  playMs: 7000,     // "56k modem" load: blocky interlaced passes crawl in top→bottom, then...
+  playMs: 5000,     // "56k modem" load: blocky interlaced passes crawl in top→bottom, then...
   taglineMs: 5000,  // the tagline downloads the same way, starting together with the computer
   holdMs: 30000,    // ...both rest for this long, then reload together
 };
