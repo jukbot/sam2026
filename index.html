@@ -27,7 +27,10 @@
 
   /* --- sky: fills the whole viewport, independent of the 16:9 stage ---- */
   .sky, .clouds { position: fixed; pointer-events: none; }
-  .sky, .clouds { inset: -4%; background: url(assets/bg.png) center / cover no-repeat; }
+  .sky, .clouds {
+    inset: -4%; background: url(assets/bg.webp) center / cover no-repeat;
+    background-image: image-set(url(assets/bg.avif) type("image/avif"), url(assets/bg.webp) type("image/webp"));
+  }
   .sky { animation: kenburns calc(var(--beat) * 64) ease-in-out infinite alternate; }
   /* second copy of the cloud deck, drifting = parallax */
   .clouds {
@@ -396,7 +399,7 @@ const tagline = (() => {
 (() => {
   const host = document.getElementById('computer');
   const img = new Image();
-  img.src = window.COMPUTER_SRC || 'assets/computer.png';   // data URI so WebGL works from file://
+  img.src = window.COMPUTER_SRC || 'assets/computer.webp';   // data URI so WebGL works from file://
   img.alt = 'Retro computer terminal';
 
   const fallback = () => { host.replaceChildren(img); };
