@@ -74,7 +74,7 @@
     text-shadow: 0 .1cqw 1.2cqw rgba(20,60,120,.18);
   }
   .title .rest { visibility: hidden; }   /* reserves the full block so nothing jumps */
-  .cursor { animation: blink calc(16s / 70) steps(1) infinite; }   /* IBM VGA text-mode cursor: toggles every 8 frames at 70 Hz (~4.4 Hz) */
+  .cursor { animation: blink 1s steps(1) infinite; }   /* DEC VT100 cursor: ~1 Hz (TM §4.6.1.6: char blink 0.5 Hz = half the cursor rate) */
   .title.typing .cursor { opacity: 1 !important; }   /* solid while typing */
   @keyframes blink { 50% { opacity: 0; } }
 
